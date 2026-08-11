@@ -17,7 +17,7 @@ combined_results = []
 TARGET_PER_DRUG = 2000
 
 #page size
-PAGE_SIZE = 300
+PAGE_SIZE = 500
 
 #dict for debugging each drug's results
 results_by_drug = {}    #dict for debugging
