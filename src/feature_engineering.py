@@ -4,6 +4,7 @@ def main():
     conn = sqlite3.connect("data/fda_adverse_events.db")
     add_reaction_count(conn)
     add_drug_count(conn)
+    add_age_in_years(conn)
     conn.close()
 
 
@@ -41,7 +42,26 @@ def add_drug_count(conn):
     )
     conn.commit()
 
+def add_age_in_years(conn):
+    #add a new column holding age converted to a consistent unit (years)
+    #raw patientonsetage mixes multiple units (decades, years, months, etc)
+    try:
+        conn.execute("ALTER TABLE reports " \
+        "ADD COLUMN patientonsetage_years REAL")
+    except sqlite3.OperationalError:
+            print("Error adding patientonsetage_years column.")
 
+    conn.execute("UPDATE reports SET patientonsetage_years = CASE " \
+    "WHEN patientonsetageunit = '800' THEN patientonsetage * 10 " \
+    "WHEN patientonsetageunit = '801' THEN patientonsetage " \
+    "WHEN patientonsetageunit = '802' THEN patientonsetage / 12 " \
+    "WHEN patientonsetageunit = '803' THEN patientonsetage / 52 " \
+    "WHEN patientonsetageunit = '804' THEN patientonsetage / 365 " \
+    "WHEN patientonsetageunit = '805' THEN patientonsetage / (24*365) " \
+    "ELSE NULL " \
+    "END")
+
+    conn.commit()
 
 if __name__ == "__main__":
     main()
