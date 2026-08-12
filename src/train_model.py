@@ -8,8 +8,13 @@ from drugs import TARGET_DRUGS
 
 def main():
     conn = sqlite3.connect("data/fda_adverse_events.db")
+
     df = load_and_clean_data(conn)
-    ...
+    drug_features_df = build_drug_features(conn)
+    X, y = build_features(df, drug_features_df)
+    train_and_save_model(X, y)
+    
+    conn.close()
 
 def load_and_clean_data(conn):
     #import reports table
@@ -68,11 +73,40 @@ def find_target_drug(drug_name, target_list):
 
 
 def build_features(df, drug_features_df):
-    ...
+    #merge tables together by ID
+    df = df.merge(drug_features_df, on="safetyreportid")
+
+    #convert patientsex col. to binary columns
+    df = pd.get_dummies(df, columns=["patientsex"])
+
+    #split table into variables X, y
+    X = df.drop(columns=["safetyreportid", "serious", "seriousnessdeath", "seriousnesshospitalization", "seriousnessdisabling", "seriousnesslifethreatening", "patientonsetage", "patientonsetageunit", "receivedate"])
+    y = (df["serious"] == "1").astype(int)
+
+    return X, y
 
 
 def train_and_save_model(X, y):
-    ...
+    #split data into train and test
+    X_train, X_test, y_train, y_test = train_test_split( \
+    X, y, test_size=0.2, random_state=42, stratify=y)   
+
+    #create scaler, fit and transform data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    #make train and test variables into DFs
+    X_train_scaled = pd.DataFrame(X_train_scaled, columns=X_train.columns)
+    X_test_scaled = pd.DataFrame(X_test_scaled, columns=X_test.columns)
+
+    #build model and train it
+    model = LogisticRegression(class_weight="balanced")
+    model.fit(X_train_scaled, y_train)
+
+    #save trained model, fitted scaler to disk
+    joblib.dump(model, "models/model.joblib")
+    joblib.dump(scaler, "models/scaler.joblib")
 
 
 if __name__ == "__main__":
