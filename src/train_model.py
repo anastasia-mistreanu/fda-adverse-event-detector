@@ -13,7 +13,7 @@ def main():
     drug_features_df = build_drug_features(conn)
     X, y = build_features(df, drug_features_df)
     train_and_save_model(X, y)
-    
+
     conn.close()
 
 def load_and_clean_data(conn):
@@ -107,6 +107,7 @@ def train_and_save_model(X, y):
     #save trained model, fitted scaler to disk
     joblib.dump(model, "models/model.joblib")
     joblib.dump(scaler, "models/scaler.joblib")
+    joblib.dump(X_train.columns.tolist(), "models/feature_columns.joblib")
 
 
 if __name__ == "__main__":

@@ -219,4 +219,7 @@ __marimo__/
 
 data/*.csv
 data/*.json
+
 data/*.db
+.claude/
+.agents/
