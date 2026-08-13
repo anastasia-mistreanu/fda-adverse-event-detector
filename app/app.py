@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import matplotlib.pyplot as plt
+import shap
 
 
 TARGET_DRUGS = [
@@ -28,33 +30,62 @@ feature_columns = joblib.load("models/feature_columns.joblib")
 
 #title and desc
 st.title("Drug Adverse Event Signal Detector")
-st.write("Predict whether an adverse event is likely to be marked serious or not.")
+st.write("Predicts whether an FDA adverse event report is likely to be marked serious, "
+    "based on drug involvement and report characteristics. This model is trained on real" 
+    " data from the FDA Adverse Event Reporting System (FAERS), covering 15 drugs across"
+    " several therapeutic categories (pain/NSAID, diabetes, cardiovascular, mental health,"
+    " opioid, antibiotic, thyroid). This is a portfolio/demo project, not a clinical "
+    " or diagnostic tool.")
 
-#multiselect dropdown list of drugs in a report
-selected_drugs = st.multiselect("Which drugs are involved in this report?", TARGET_DRUGS)
+#instructions for use
+st.write("**How to use this tool:**")
+st.write(
+    "Enter the details of an adverse event report below:  the drug(s) involved, "
+    "the number of reactions and drugs listed, and the patient's sex and age "
+    "(or check \"Age unknown\" if unavailable). Click **Predict** to see the model's "
+    "estimated likelihood that the report would be marked serious."
+)
 
-#input # of reactions in a report
-reaction_count = st.number_input("Number of reactions listed", \
-                             min_value=1, max_value=200, value=3)
+st.divider()
 
-#input # of drugs listed on a report
-drug_count = st.number_input("Number of drugs listed", \
-                             min_value=1, max_value=304, value=3)
+#group inputs visually
+with st.container(border=True):
+    #multiselect dropdown list of drugs in a report
+    selected_drugs = st.multiselect("Which drugs are involved in this report?",
+                                    TARGET_DRUGS, help="Select all drugs mentioned in this" \
+                                    " adverse event report.")
 
-#select patient sex Unknown/F/M
-sex = st.selectbox("Patient sex", ["Unknown", "Male", "Female"])
+    #input # of reactions in a report
+    reaction_count = st.number_input("Number of reactions listed", \
+                                 min_value=1, max_value=200, value=3,
+                                 help="How many distinct reactions/symptoms are listed on this" \
+                                 " report.")
 
-#select patient age 
+    #input # of drugs listed on a report
+    drug_count = st.number_input("Number of drugs listed", \
+                                 min_value=1, max_value=304, value=3,
+                                 help="Total number of drugs mentioned on this report, including " \
+                                 "any not in the dropdown above.")
 
-#if age unknown - use median age:
-age_unknown = st.checkbox("Age unknown") #returns True or False
-median_age = 62.0
+    #select patient sex Unknown/F/M
+    sex = st.selectbox("Patient sex", ["Unknown", "Male", "Female"], 
+                       help="Patient's sex as reported on the report.")
 
-if age_unknown:
-    age = median_age
-else:
-    age = st.number_input("Patient age", min_value=0, max_value=110, value=50)
+    #select patient age 
 
+    #if age unknown - use median age:
+    age_unknown = st.checkbox("Age unknown", 
+                              help="If checked, the model uses the typical (median) " \
+                              "patient age from the training data, " \
+                              " instead of a specific value.") #returns True or False
+    median_age = 62.0
+
+    if age_unknown:
+        age = median_age
+    else:
+        age = st.number_input("Patient age", min_value=0, max_value=110, value=50)
+
+st.divider()
 
 #prediction logic of app
 
@@ -94,6 +125,8 @@ if st.button("Predict"):
 
     #scaling input as per model
     input_scaled = scaler.transform(input_df)
+    input_scaled = pd.DataFrame(input_scaled, columns=feature_columns)
+
     #proba of serious cols. (1) at index 0
     probability = model.predict_proba(input_scaled)[:,1][0]
 
@@ -102,7 +135,43 @@ if st.button("Predict"):
     prediction = "Serious" if probability >= threshold \
     else "Not Serious"
 
-    #print outcome on app
-    st.write(f"### Prediction: {prediction}")
-    st.write(f"Predicted probability of serious outcome {probability: .2%}")
-    
+    #print and explain outcome
+    if prediction == "Serious":
+        st.error(f"Prediction: {prediction}")
+    else:
+        st.success(f"Prediction: {prediction}")
+
+    st.metric("Probability of serious outcome", f"{probability:.1%}")
+
+    st.caption(
+    "A report is marked 'serious' if it involved an outcome such as "
+    "hospitalization, disability or death. This prediction reflects patterns "
+    "in historical FAERS reports and does not indicate the real-world risk of "
+    "taking any specific drug. FAERS is a voluntary reporting system with no "
+    "defined denominator, so incidence rates cannot be calculated from it."
+)
+
+    #SHAP explanation for live prediction
+    with st.spinner("Computing explanation..."):
+        background = pd.DataFrame([[0] * len(feature_columns)], columns=feature_columns)
+        explainer = shap.Explainer(model, background)
+        shap_values = explainer(input_scaled)
+
+    st.write("### Why this prediction?")
+    st.write(
+    "The chart below shows which factors most influenced this specific prediction. "
+    "Each bar represents one input: red bars pushed the prediction toward 'serious', "
+    "blue bars pushed it toward 'not serious'. The size of each bar shows how much "
+    "that factor mattered for this particular report."
+)
+    fig = plt.figure()
+    shap.plots.waterfall(shap_values[0], show=False)
+    st.pyplot(fig)
+
+    st.caption(
+    "The number on the left of each bar is that factor's value after standardization "
+    "(a technique used to make different types of inputs comparable, so raw numbers "
+    "won't match what you entered directly). Drugs you didn't select can still appear "
+    "if their absence meaningfully influenced the prediction."
+)
+
