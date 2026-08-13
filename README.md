@@ -1,4 +1,3 @@
-# fda-adverse-event-detector
 # Drug Adverse Event Signal Detector
 
 Predicting whether a drug adverse event report is likely to be marked serious, using real FDA safety data.
